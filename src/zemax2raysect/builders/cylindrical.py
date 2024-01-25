@@ -37,7 +37,6 @@ class CylindricalMirrorBuilder(MirrorBuilder):
 
     def _clear_parameters(self: "CylindricalMirrorBuilder") -> None:
         self._diameter: float = None
-        self._center_thickness: float = None
         self._curvature: float = None
         self._material: Material = None
         self._name: str = None
@@ -87,7 +86,6 @@ class CylindricalMirrorBuilder(MirrorBuilder):
             self._rotation = rotate_z(90)
 
         self._diameter = 2 * surface.semi_diameter
-        self._center_thickness = surface.thickness or DEFAULT_THICKNESS
         self._material = find_material(surface.material)
         self._name = surface.name
 
@@ -113,7 +111,6 @@ class CylindricalMirrorBuilder(MirrorBuilder):
 
         mirror = CylindricalMirror(
             self._diameter,
-            self._center_thickness,
             self._curvature,
             material=self._material,
             name=self._name,
