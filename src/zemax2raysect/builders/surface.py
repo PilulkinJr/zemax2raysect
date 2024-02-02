@@ -46,12 +46,15 @@ class CircleBuilder(MirrorBuilder):
     def _extract_parameters(
         self: "CircleBuilder",
         surface: Union[Standard, Toroidal],
+        material: Material = None,
     ) -> None:
         """Extract parameters from a surface description.
 
         Parameters
         ----------
         surface : Standard or Toroidal
+        material : Material
+            Custom mirror material. Default is None (ideal mirror).
 
         Returns
         -------
@@ -70,14 +73,18 @@ class CircleBuilder(MirrorBuilder):
         if shape_type is not ShapeType.ROUND:
             raise CannotCreatePrimitive(f"Cannot create Circle from {surface}: it is not round")
 
+        if material and not isinstance(material, Material):
+            raise TypeError(f"Cannot create a mirror from {surface}: material must be a Raysect Material.")
+
         self._radius = surface.semi_diameter
-        self._material = find_material(surface.material)
+        self._material = material or find_material(surface.material)
         self._name = surface.name
 
     def build(
         self: "CircleBuilder",
         surface: Union[Standard, Toroidal],
         direction: Direction = 1,
+        material: Material = None,
     ) -> Circle:
         """Create a raysect.primitive.Cylinder using parameters from a surface description.
 
@@ -85,13 +92,15 @@ class CircleBuilder(MirrorBuilder):
         ----------
         surface : Standard or Toroidal
         direction : {-1, 1}, default = 1
+        material : Material
+            Custom mirror material. Default is None (ideal mirror).
 
         Returns
         -------
         Circle
         """
         self._clear_parameters()
-        self._extract_parameters(surface)
+        self._extract_parameters(surface, material)
 
         return Circle(self._radius, material=self._material, name=self._name)
 
@@ -123,12 +132,15 @@ class RectangleBuilder(MirrorBuilder):
     def _extract_parameters(
         self: "RectangleBuilder",
         surface: Union[Standard, Toroidal],
+        material: Material = None,
     ) -> None:
         """Extract parameters from a surface description.
 
         Parameters
         ----------
         surface : Standard or Toroidal
+        material : Material
+            Custom mirror material. Default is None (ideal mirror).
 
         Returns
         -------
@@ -162,13 +174,14 @@ class RectangleBuilder(MirrorBuilder):
 
         self._width = surface.aperture[0] * 2
         self._height = surface.aperture[1] * 2
-        self._material = find_material(surface.material)
+        self._material = material or find_material(surface.material)
         self._name = surface.name
 
     def build(
         self: "RectangleBuilder",
         surface: Union[Standard, Toroidal],
         direction: Direction = 1,
+        material: Material = None,
     ) -> Rectangle:
         """Create an instance Rectangle using parameters from a surface description.
 
@@ -176,6 +189,8 @@ class RectangleBuilder(MirrorBuilder):
         ----------
         surface : Standard or Toroidal
         direction : {-1, 1}, default = 1
+        material : Material
+            Custom mirror material. Default is None (ideal mirror).
 
         Returns
         -------
@@ -222,6 +237,7 @@ class AbstractSurfacePrimitiveBuilder:
         name: str,
         surface: Union[Standard, Toroidal],
         direction: Direction = 1,
+        material: Material = None,
     ) -> Union[Circle, Rectangle]:
         """Build a primitive with a requested name.
 
@@ -230,17 +246,19 @@ class AbstractSurfacePrimitiveBuilder:
         name : str
         surface : Standard or Toroidal
         direction : {-1, 1}, default = 1
+        material : Material
+            Custom mirror material. Default is None (ideal mirror).
 
         Returns
         -------
         Circle or Rectangle
         """
-        return cls.get_builder(name)().build(surface, direction)
+        return cls.get_builder(name)().build(surface, direction, material)
 
 
-def create_circle(surface: Union[Standard, Toroidal], direction: Direction = 1) -> Circle:
-    return CircleBuilder().build(surface, direction)
+def create_circle(surface: Union[Standard, Toroidal], direction: Direction = 1, material: Material = None) -> Circle:
+    return CircleBuilder().build(surface, direction, material)
 
 
-def create_rectangle(surface: Union[Standard, Toroidal], direction: Direction = 1) -> Rectangle:
-    return RectangleBuilder().build(surface, direction)
+def create_rectangle(surface: Union[Standard, Toroidal], direction: Direction = 1, material: Material = None) -> Rectangle:
+    return RectangleBuilder().build(surface, direction, material)

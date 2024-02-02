@@ -42,7 +42,7 @@ class CylindricalMirrorBuilder(MirrorBuilder):
         self._name: str = None
         self._rotation: AffineMatrix3D = AffineMatrix3D()
 
-    def _extract_parameters(self: "CylindricalMirrorBuilder", surface: Toroidal) -> None:
+    def _extract_parameters(self: "CylindricalMirrorBuilder", surface: Toroidal, material: Material = None) -> None:
         if not isinstance(surface, Toroidal):
             raise CannotCreatePrimitive(
                 f"Cannot create cylindrical mirror from {surface}"
@@ -63,6 +63,9 @@ class CylindricalMirrorBuilder(MirrorBuilder):
                 f"Cannot create cylindrical mirror from {surface}"
                 ": it is not a circle, nor a rectangle"
             )
+
+        if material and not isinstance(material, Material):
+            raise TypeError(f"Cannot create a mirror from {surface}: material must be a Raysect Material.")
 
         if shape_type == ShapeType.RECTANGULAR:
             LOGGER.warning(
@@ -86,13 +89,14 @@ class CylindricalMirrorBuilder(MirrorBuilder):
             self._rotation = rotate_z(90)
 
         self._diameter = 2 * surface.semi_diameter
-        self._material = find_material(surface.material)
+        self._material = material or find_material(surface.material)
         self._name = surface.name
 
     def build(
         self: "CylindricalMirrorBuilder",
         surface: Toroidal,
         direction: Direction = 1,
+        material: Material = None,
     ) -> CylindricalMirror:
         """Build a cylindrical mirror primitive.
 
@@ -101,13 +105,15 @@ class CylindricalMirrorBuilder(MirrorBuilder):
         surface : Toroidal
         direction : {-1, 1}, default = 1
             Ray propagation direction.
+        material : Material
+            Custom mirror material. Default is None (ideal mirror).
 
         Returns
         -------
         CylindricalMirror
         """
         self._clear_parameters()
-        self._extract_parameters(surface)
+        self._extract_parameters(surface, material)
 
         mirror = CylindricalMirror(
             self._diameter,
@@ -141,6 +147,7 @@ class CylindricalLensBuilder(LensBuilder):
         self: "CylindricalLensBuilder",
         back_surface: Toroidal,
         front_surface: Toroidal,
+        material: Material = None,
     ) -> None:
         """Extract lens parameters from two surfaces.
 
@@ -148,12 +155,20 @@ class CylindricalLensBuilder(LensBuilder):
         ----------
         back_surface, front_surface : Toroidal
             Two sequential surfaces defining a cylindrical lens.
+        material: Material
+            Custom lens material. Default is None
+            (will search back_surface.material in the Raysect library).
 
         Returns
         -------
         None
         """
-        self._check_for_material(back_surface)
+        if material and not isinstance(material, Material):
+            raise TypeError(f"Cannot create a lens from {back_surface.name, front_surface.name}:"
+                            " material must be a Raysect Material.")
+
+        if not material:
+            self._check_for_material(back_surface)
         self._check_for_small_numbers(back_surface)
         self._check_for_small_numbers(front_surface)
 
@@ -236,13 +251,14 @@ class CylindricalLensBuilder(LensBuilder):
 
         self._diameter = back_surface.semi_diameter * 2 or front_surface.semi_diameter * 2
         self._center_thickness = back_surface.thickness or DEFAULT_THICKNESS
-        self._material = find_material(back_surface.material)
+        self._material = material or find_material(back_surface.material)
         self._name = back_surface.name or front_surface.name
 
     def build(
         self: "CylindricalLensBuilder",
         back_surface: Toroidal,
         front_surface: Toroidal,
+        material: Material = None,
     ) -> Union[
         CylindricalBiConvex,
         CylindricalBiConcave,
@@ -255,13 +271,16 @@ class CylindricalLensBuilder(LensBuilder):
         Parameters
         ----------
         back_surface, front_surface : Toroidal
+        material : Material
+            Custom lens material. Default is None
+            (will search back_surface.material in the Raysect library).
 
         Returns
         -------
         Union[BiConvex, BiConcave, Meniscus, PlanoConvex, PlanoConcave]
         """
         self._clear_parameters()
-        self._extract_parameters(back_surface, front_surface)
+        self._extract_parameters(back_surface, front_surface, material)
 
         LOGGER.debug(
             "Building cylindrical lens: back_sgn = %g, back_sgn = %g",
@@ -316,8 +335,6 @@ class CylindricalLensBuilder(LensBuilder):
         back_surface: Toroidal,
         front_surface: Toroidal,
     ) -> Union[CylindricalPlanoConvex, CylindricalPlanoConcave]:
-        self._clear_parameters()
-        self._extract_parameters(back_surface, front_surface)
 
         lens = lens_class(
             self._diameter,
@@ -336,8 +353,6 @@ class CylindricalLensBuilder(LensBuilder):
         back_surface: Toroidal,
         front_surface: Toroidal,
     ) -> Union[CylindricalPlanoConvex, CylindricalPlanoConcave]:
-        self._clear_parameters()
-        self._extract_parameters(back_surface, front_surface)
 
         lens = lens_class(
             self._diameter,
@@ -384,8 +399,6 @@ class CylindricalLensBuilder(LensBuilder):
         back_surface: Toroidal,
         front_surface: Toroidal,
     ) -> Union[CylindricalBiConvex, CylindricalBiConcave, CylindricalMeniscus]:
-        self._clear_parameters()
-        self._extract_parameters(back_surface, front_surface)
 
         lens = lens_class(
             self._diameter,
@@ -405,8 +418,6 @@ class CylindricalLensBuilder(LensBuilder):
         back_surface: Toroidal,
         front_surface: Toroidal,
     ) -> CylindricalMeniscus:
-        self._clear_parameters()
-        self._extract_parameters(back_surface, front_surface)
 
         lens = lens_class(
             self._diameter,

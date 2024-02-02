@@ -3,6 +3,7 @@ import logging
 from typing import Literal, Sequence, Union
 
 from raysect.core import AffineMatrix3D, Node, translate
+from raysect.optical import Material
 
 from ..surface import CoordinateBreak, Surface
 from .abstract import AbstractLensBuilder, AbstractMirrorBuilder
@@ -31,6 +32,7 @@ class OpticalNodeBuilder:
         self: "OpticalNodeBuilder",
         surfaces: Sequence[Surface],
         *,
+        materials: dict[str, Material] = None,
         keep_empty_surfaces: bool = False,
         transmission_only: bool = False,
     ) -> Node:
@@ -39,6 +41,9 @@ class OpticalNodeBuilder:
         Parameters
         ----------
         surfaces : Sequence of Surface
+        materials: dict, default None
+            User-provided dictionary mapping Zemax materials to Raysect materials.
+            Searches for material by surface name, and, if not found, by surface material name.
         keep_empty_surfaces : {False, True, "image"}, default = False
             If True, create a primitive even if "Glass" for it is not set.
             "image" -- create such primitive only for image surface (the last one).
@@ -55,6 +60,9 @@ class OpticalNodeBuilder:
 
         if not all(isinstance(s, Surface) for s in surfaces):
             raise TypeError(f"All elements of 'surfaces' must be {Surface}")
+
+        if materials and not all(isinstance(key, str) and isinstance(val, Material) for key, val in materials.items()):
+            raise TypeError(f"All elements of 'materials' must be {Surface}")
 
         if keep_empty_surfaces not in (False, True, "image"):
             raise ValueError(
@@ -107,11 +115,20 @@ class OpticalNodeBuilder:
                 idx += 1
                 continue
 
+            material = None
+            if materials:
+                # search for custom material by surface name
+                if current_surface.name in materials:
+                    material = materials[current_surface.name]
+                # search for custom material by surface material name
+                elif current_surface.material and current_surface.material in materials:
+                    material = materials[current_surface.material]
+
             if idx + 1 < n_surfaces and not isinstance(surfaces[idx + 1], CoordinateBreak):
 
                 next_surface = surfaces[idx + 1]
 
-                if self._build_lens(current_surface, next_surface, node):
+                if self._build_lens(current_surface, next_surface, node, material):
 
                     LOGGER.info(
                         "Surfaces %i and %i: a %s has been created",
@@ -121,23 +138,13 @@ class OpticalNodeBuilder:
                     )
                     idx += 1
 
-                    # front surface also a back surface of the next lens
-                    # create some space between them
-                    if next_surface.material:
-                        padding = current_surface.thickness * 1.0e-6
-                        self._current_transform *= translate(
-                            0, 0, current_surface.thickness + padding
-                        )
-                    # two surfaces define just one lens
-                    # its only contribution is its thickness
-                    else:
+                    # two surfaces define just one lens, skipping next surface
+                    if not next_surface.material:
                         idx += 1
-                        self._current_transform *= translate(
-                            0, 0, current_surface.thickness + next_surface.thickness
-                        )
+
                     continue
 
-            if self._build_mirror(current_surface, self._current_direction, node):
+            if self._build_mirror(current_surface, self._current_direction, node, material):
                 LOGGER.info("Surface %i: a %s has been created", idx, type(node.children[-1]))
                 idx += 1
             else:
@@ -216,13 +223,14 @@ class OpticalNodeBuilder:
         current_surface: Surface,
         direction: Direction,
         parent_node: Node,
+        material: Material = None,
     ) -> bool:
 
         for mirror_type in AbstractMirrorBuilder.builders:
 
             try:
                 # LOGGER.debug("Trying to build a %s mirror from %s", mirror_type, current_surface)
-                mirror = AbstractMirrorBuilder.build(mirror_type, current_surface, direction)
+                mirror = AbstractMirrorBuilder.build(mirror_type, current_surface, direction, material)
 
             except CannotCreatePrimitive as exception:
                 self._last_exception = exception
@@ -245,12 +253,13 @@ class OpticalNodeBuilder:
         current_surface: Surface,
         next_surface: Surface,
         parent_node: Node,
+        material: Material = None,
     ) -> bool:
 
         for lens_type in AbstractLensBuilder.builders:
 
             try:
-                lens = AbstractLensBuilder.build(lens_type, current_surface, next_surface)
+                lens = AbstractLensBuilder.build(lens_type, current_surface, next_surface, material)
 
             except CannotCreatePrimitive:
                 continue
@@ -263,11 +272,12 @@ class OpticalNodeBuilder:
             if next_surface.material:
                 padding = current_surface.thickness * 1.0e-6
                 self._current_transform *= translate(0, 0, current_surface.thickness + padding)
-            # else:
-            #     self._current_transform *= translate(
-            #         0, 0, current_surface.thickness + next_surface.thickness
-            #     )
-            #     idx += 1
+            # two surfaces define just one lens
+            # its only contribution is its thickness
+            else:
+                self._current_transform *= translate(
+                    0, 0, current_surface.thickness + next_surface.thickness
+                )
 
             self._process_mirror(current_surface)
 
@@ -280,11 +290,13 @@ class OpticalNodeBuilder:
 def create_optical_node(
     surfaces: Sequence[Surface],
     *,
+    materials: dict[str, Material] = None,
     keep_empty_surfaces: bool = False,
     transmission_only: bool = False,
 ) -> Node:
     return OpticalNodeBuilder().build(
         surfaces,
+        materials=materials,
         keep_empty_surfaces=keep_empty_surfaces,
         transmission_only=transmission_only,
     )
