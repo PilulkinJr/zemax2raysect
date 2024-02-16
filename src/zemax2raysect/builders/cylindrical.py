@@ -1,6 +1,6 @@
 """Builder class for cylindrical mirrors and lenses."""
 import logging
-from typing import Type, Union
+from typing import Type, Union, Tuple
 
 from raysect.core import AffineMatrix3D, Material, rotate_z
 from raysect.primitive import EncapsulatedPrimitive
@@ -13,7 +13,7 @@ from ..primitive.lens.cylindrical import (
     CylindricalPlanoConcave,
     CylindricalPlanoConvex,
 )
-from ..primitive.mirror.cylindrical import CylindricalMirror
+from ..primitive.mirror.cylindrical import RoundCylindricalMirror, RectangularCylindricalMirror
 from ..surface import Toroidal
 from .base import LensBuilder, MirrorBuilder
 from .common import (
@@ -37,9 +37,16 @@ class CylindricalMirrorBuilder(MirrorBuilder):
 
     def _clear_parameters(self: "CylindricalMirrorBuilder") -> None:
         self._diameter: float = None
+        self._width: float = None
+        self._height: float = None
         self._curvature: float = None
+        self._aperture: float = 0
+        self._horizontal_decenter: float = 0
+        self._vertical_decenter: float = 0
+        self._shape_type: str = ShapeType.UNDETERMINED
         self._material: Material = None
         self._name: str = None
+        self._curvature_sign: int = None
         self._rotation: AffineMatrix3D = AffineMatrix3D()
 
     def _extract_parameters(self: "CylindricalMirrorBuilder", surface: Toroidal, material: Material = None) -> None:
@@ -67,20 +74,24 @@ class CylindricalMirrorBuilder(MirrorBuilder):
         if material and not isinstance(material, Material):
             raise TypeError(f"Cannot create a mirror from {surface}: material must be a Raysect Material.")
 
-        if shape_type == ShapeType.RECTANGULAR:
-            LOGGER.warning(
-                "Despite of having a rectangular aperture, "
-                f"{surface} will be made into a round mirror"
-            )
-
         if surface.radius != 0:
 
             if surface.radius_horizontal != 0:
-                raise CannotCreatePrimitive()
+                raise CannotCreatePrimitive(
+                    f"Cannot create cylindrical mirror from {surface}"
+                    ": the surface is not cylindrical but toroidal."
+                )
 
             self._curvature = abs(surface.radius)
             self._curvature_sign = sign(surface.radius)
             self._rotation = AffineMatrix3D()
+
+            if shape_type is ShapeType.RECTANGULAR:
+                self._width = 2 * surface.aperture[0]
+                self._height = 2 * surface.aperture[1]
+            if surface.aperture_decenter:
+                self._horizontal_decenter = surface.aperture_decenter[0]
+                self._vertical_decenter = surface.aperture_decenter[1]
 
         elif surface.radius_horizontal != 0:
 
@@ -88,7 +99,31 @@ class CylindricalMirrorBuilder(MirrorBuilder):
             self._curvature_sign = sign(surface.radius_horizontal)
             self._rotation = rotate_z(90)
 
-        self._diameter = 2 * surface.semi_diameter
+            if shape_type is ShapeType.RECTANGULAR:
+                self._width = 2 * surface.aperture[1]
+                self._height = 2 * surface.aperture[0]
+            if surface.aperture_decenter:
+                self._horizontal_decenter = -surface.aperture_decenter[1]
+                self._vertical_decenter = surface.aperture_decenter[0]
+
+        else:
+            raise CannotCreatePrimitive(
+                f"Cannot create cylindrical mirror from {surface}"
+                ": the surface is flat."
+            )
+
+        self._shape_type = shape_type
+
+        if shape_type is ShapeType.ROUND:
+            if surface.aperture:
+                self._diameter = 2 * surface.aperture[1]
+                self._aperture = 2 * surface.aperture[0]
+            else:
+                self._diameter = 2 * surface.semi_diameter
+
+        if self._curvature_sign == -1:
+            self._horizontal_decenter = -self._horizontal_decenter
+
         self._material = material or find_material(surface.material)
         self._name = surface.name
 
@@ -97,7 +132,10 @@ class CylindricalMirrorBuilder(MirrorBuilder):
         surface: Toroidal,
         direction: Direction = 1,
         material: Material = None,
-    ) -> CylindricalMirror:
+    ) -> Union[
+        RoundCylindricalMirror,
+        RectangularCylindricalMirror
+    ]:
         """Build a cylindrical mirror primitive.
 
         Parameters
@@ -110,17 +148,32 @@ class CylindricalMirrorBuilder(MirrorBuilder):
 
         Returns
         -------
-        CylindricalMirror
+        RoundCylindricalMirror or RectangularCylindricalMirror
         """
         self._clear_parameters()
         self._extract_parameters(surface, material)
 
-        mirror = CylindricalMirror(
-            self._diameter,
-            self._curvature,
-            material=self._material,
-            name=self._name,
-        )
+        if self._shape_type == ShapeType.ROUND:
+            mirror = RoundCylindricalMirror(
+                self._diameter,
+                self._curvature,
+                aperture=self._aperture,
+                horizontal_decenter=self._horizontal_decenter,
+                vertical_decenter=self._vertical_decenter,
+                material=self._material,
+                name=self._name,
+            )
+        else:
+            mirror = RectangularCylindricalMirror(
+                self._width,
+                self._height,
+                self._curvature,
+                aperture=self._aperture,
+                horizontal_decenter=self._horizontal_decenter,
+                vertical_decenter=self._vertical_decenter,
+                material=self._material,
+                name=self._name,
+            )
         mirror.transform = (
             transform_according_to_direction(mirror, direction, self._curvature_sign)
             * self._rotation

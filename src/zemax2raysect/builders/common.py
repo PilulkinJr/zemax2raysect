@@ -64,7 +64,7 @@ def determine_primitive_type(surface: Union[Standard, Toroidal]) -> Tuple[Surfac
 
     # shape_type = ShapeType.RECTANGULAR if surface.aperture is not None else ShapeType.ROUND
 
-    if surface.aperture is not None and surface.aperture_decenter is None:
+    if surface.aperture is not None and surface.aperture_type == 'rectangular':
         shape_type = ShapeType.RECTANGULAR
     else:
         shape_type = ShapeType.ROUND
