@@ -1,4 +1,4 @@
 """Mirror primitives."""
-from .cylindrical cimport CylindricalMirror
-from .spherical cimport SphericalMirror
+from .cylindrical cimport RoundCylindricalMirror, RectangularCylindricalMirror
+from .spherical cimport RoundSphericalMirror, RectangularSphericalMirror
 from .toric cimport ToricMirror

@@ -8,7 +8,7 @@ from raysect.primitive.lens import BiConcave, BiConvex, PlanoConcave, PlanoConve
 
 from ..materials import find_material
 from ..primitive.lens.spherical import Meniscus
-from ..primitive.mirror.spherical import SphericalMirror
+from ..primitive.mirror.spherical import RoundSphericalMirror, RectangularSphericalMirror
 from ..surface import Standard, Toroidal
 from .base import LensBuilder, MirrorBuilder
 from .common import (
@@ -18,6 +18,7 @@ from .common import (
     ShapeType,
     SurfaceType,
     determine_primitive_type,
+    transform_according_to_direction,
     flip,
     sign,
 )
@@ -27,11 +28,11 @@ LOGGER = logging.getLogger(__name__)
 
 
 class SphericalMirrorBuilder(MirrorBuilder):
-    """Builder class for SphericalMirror.
+    """Builder class for spherical mirror primitives.
 
     Methods
     -------
-    build(surface, direction, material=None) : SphericalMirror
+    build(surface, direction, material=None) : raysect.primitive.EncapsulatedPrimitive
         Build a SphericalMirror instance using Zemax surface description.
     """
 
@@ -45,8 +46,13 @@ class SphericalMirrorBuilder(MirrorBuilder):
         None
         """
         self._diameter: float = None
-        self._center_thickness: float = None
+        self._width: float = None
+        self._height: float = None
         self._curvature: float = None
+        self._aperture: float = 0
+        self._horizontal_decenter: float = 0
+        self._vertical_decenter: float = 0
+        self._shape_type: str = ShapeType.UNDETERMINED
         self._material: Material = None
         self._name: str = None
         self._curvature_sign: int = None
@@ -71,7 +77,7 @@ class SphericalMirrorBuilder(MirrorBuilder):
         if not isinstance(surface, (Standard, Toroidal)):
             raise CannotCreatePrimitive(
                 self._CANNOT_CREATE_MSG
-                + f"'surface' must be {Union[Standard, Toroidal]}, got {type(surface)}"
+                + f"'surface' must be {Union[Standard, Toroidal]}, got {type(surface)}."
             )
 
         self._check_for_small_numbers(surface)
@@ -81,38 +87,53 @@ class SphericalMirrorBuilder(MirrorBuilder):
         if surface_type != SurfaceType.SPHERICAL:
             raise CannotCreatePrimitive(
                 self._CANNOT_CREATE_MSG
-                + f"'surface' {surface} does not define a spherical surface"
+                + f"'surface' {surface} does not define a spherical surface."
             )
 
         if shape_type not in (ShapeType.RECTANGULAR, ShapeType.ROUND):
             raise CannotCreatePrimitive(
                 self._CANNOT_CREATE_MSG
-                + f"aperture type of 'surface' {surface} is not implemented"
+                + f"aperture type of 'surface' {surface} is not implemented."
             )
 
         if material and not isinstance(material, Material):
             raise TypeError(f"Cannot create a mirror from {surface}: material must be a Raysect Material.")
 
-        if shape_type == ShapeType.RECTANGULAR:
-            LOGGER.warning(
-                "Despite of having a rectangular aperture, "
-                "surface will be made into a round mirror"
-            )
-
-        self._diameter = 2 * surface.semi_diameter
-        self._center_thickness = surface.thickness or DEFAULT_THICKNESS
         self._curvature = abs(surface.radius)
+        self._curvature_sign = sign(surface.radius)
+
+        self._shape_type = shape_type
+
+        if shape_type is ShapeType.RECTANGULAR:
+            self._width = 2 * surface.aperture[0]
+            self._height = 2 * surface.aperture[1]
+        elif shape_type is ShapeType.ROUND:
+            if surface.aperture:
+                self._diameter = 2 * surface.aperture[1]
+                self._aperture = 2 * surface.aperture[0]
+            else:
+                self._diameter = 2 * surface.semi_diameter
+
+        if surface.aperture_decenter:
+            self._horizontal_decenter = surface.aperture_decenter[0]
+            self._vertical_decenter = surface.aperture_decenter[1]
+
+        if self._curvature_sign == -1:
+            self._horizontal_decenter = -self._horizontal_decenter
+
         self._material = material or find_material(surface.material)
         self._name = surface.name
-        self._curvature_sign = sign(surface.radius)
 
     def build(
         self: "SphericalMirrorBuilder",
         surface: Union[Standard, Toroidal],
         direction: Direction = 1,
         material: Material = None,
-    ) -> SphericalMirror:
-        """Build a SphericalMirror using Zemax surface.
+    ) -> Union[
+        RoundSphericalMirror,
+        RectangularSphericalMirror
+    ]:
+        """Build a spherical mirror using Zemax surface.
 
         Parameters
         ----------
@@ -125,35 +146,33 @@ class SphericalMirrorBuilder(MirrorBuilder):
 
         Returns
         -------
-        SphericalMirror
+        RoundSphericalMirror, RectangularSphericalMirror
         """
         self._clear_parameters()
         self._extract_parameters(surface, material)
 
-        # mirror = SphericalMirror(
-        #     self._diameter,
-        #     self._center_thickness,
-        #     self._curvature,
-        #     material=self._material,
-        #     name=self._name,
-        # )
-
-        # mirror.transform = transform_according_to_direction(
-        #     mirror, direction, self._curvature_sign
-        # )
-
-        mirror = SphericalMirror(
-            self._diameter,
-            self._curvature,
-            material=self._material,
-            name=self._name,
-        )
-
-        if direction == 1 and self._curvature_sign == -1:
-            LOGGER.debug("Rotating mirror %s around y axis", mirror.name)
-            mirror.transform = rotate_y(180)
-        # else:
-        #     mirror.transform = AffineMatrix3D()
+        if self._shape_type == ShapeType.ROUND:
+            mirror = RoundSphericalMirror(
+                self._diameter,
+                self._curvature,
+                aperture=self._aperture,
+                horizontal_decenter=self._horizontal_decenter,
+                vertical_decenter=self._vertical_decenter,
+                material=self._material,
+                name=self._name,
+            )
+        else:
+            mirror = RectangularSphericalMirror(
+                self._width,
+                self._height,
+                self._curvature,
+                aperture=self._aperture,
+                horizontal_decenter=self._horizontal_decenter,
+                vertical_decenter=self._vertical_decenter,
+                material=self._material,
+                name=self._name,
+            )
+        mirror.transform = transform_according_to_direction(mirror, direction, self._curvature_sign)
 
         return mirror
 
@@ -461,7 +480,7 @@ def create_spherical_mirror(
     surface: Union[Standard, Toroidal],
     direction: Direction = 1,
     material: Material = None,
-) -> SphericalMirror:
+) -> Union[RoundSphericalMirror, RectangularSphericalMirror]:
     return SphericalMirrorBuilder().build(surface, direction, material)
 
 

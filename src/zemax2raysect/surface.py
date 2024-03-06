@@ -29,7 +29,9 @@ class SurfaceDescription:
     diam : float, default = 0
         Surface's radius. "Semi-Diameter" in LDE.
     sqap : (float, float), default = None
-        Surface's aperture width in x and y directions.
+        Surface's rectangular aperture width in x and y directions.
+    clap : (float, float), default = None
+        Surface's circular aperture min and max radii.
     obdc : (float, float), default = None
         Surface's aperture decenter in x and y directions.
     parm : dict(int, float), default = {}
@@ -49,6 +51,7 @@ class SurfaceDescription:
     glas: str = ""
     diam: float = 0.0
     sqap: Tuple[float, float] = None
+    clap: Tuple[float, float] = None
     obdc: Tuple[float, float] = None
     parm: Dict[int, float] = field(default_factory=dict)
 
@@ -110,9 +113,13 @@ class SurfaceDescription:
             if cmd == "DIAM":
                 description.diam = float(value)
 
-            # Aperture
+            # Rectangular aperture
             if cmd == "SQAP":
                 description.sqap = (float(columns[1]), float(columns[2]))
+
+            # Circular aperture
+            if cmd == "CLAP":
+                description.clap = (float(columns[1]), float(columns[2]))
 
             # Aperture decenter
             if cmd == "OBDC":
@@ -145,6 +152,8 @@ class Surface:
         Aperture width in x and y directions.
     aperture_decenter : (float, float), default = None
         Aperture decenter in x and y directions.
+    aperture_type : str, default = ""
+        Aperture type.
 
     Methods
     -------
@@ -230,7 +239,11 @@ class SurfaceBuilder:
         obj.material = description.glas
 
         if description.sqap is not None:
+            obj.aperture_type = "rectangular"
             obj.aperture = (description.sqap[0] * units_factor, description.sqap[1] * units_factor)
+        elif description.clap is not None:
+            obj.aperture_type = "circular"
+            obj.aperture = (description.clap[0] * units_factor, description.clap[1] * units_factor)
 
         if description.obdc is not None:
             obj.aperture_decenter = (
