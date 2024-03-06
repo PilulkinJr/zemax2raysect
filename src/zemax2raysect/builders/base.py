@@ -1,5 +1,6 @@
 """Base classes for optical builders."""
 from raysect.primitive import EncapsulatedPrimitive
+from raysect.optical import Material
 
 from ..surface import Surface
 from .common import CannotCreatePrimitive, Direction
@@ -26,12 +27,14 @@ class OpticsBuilder:
         """
         raise NotImplementedError(NOT_IMPLEMENTED_MESSAGE)
 
-    def _extract_parameters(self: "OpticsBuilder", *args: Surface) -> None:
+    def _extract_parameters(self: "OpticsBuilder", *args: Surface, material: Material = None) -> None:
         """Extract parameters required to build an optical element.
 
         Parameters
         ----------
         args : Surface
+        material : Material
+            Default is None. User-defined Raysect optical material for a mirror or a lens.
 
         Returns
         -------
@@ -39,7 +42,7 @@ class OpticsBuilder:
         """
         raise NotImplementedError(NOT_IMPLEMENTED_MESSAGE)
 
-    def build(self: "OpticsBuilder", *args: Surface) -> EncapsulatedPrimitive:
+    def build(self: "OpticsBuilder", *args: Surface, material: Material = None) -> EncapsulatedPrimitive:
         """Build an optical element.
 
         Parameters
@@ -47,6 +50,8 @@ class OpticsBuilder:
         args : Surface
             A sequence of surfaces which define an optical element.
             For example, one -- for a mirror, two -- for a lens.
+        material : Material
+            Default is None. User-defined Raysect optical material for a mirror or a lens.
 
         Returns
         -------
@@ -86,11 +91,11 @@ class MirrorBuilder(OpticsBuilder):
         Build a mirror using a surface parameters.
     """
 
-    def _extract_parameters(self: "LensBuilder", surface: Surface) -> None:
+    def _extract_parameters(self: "LensBuilder", surface: Surface, material: Material = None) -> None:
         raise NotImplementedError(NOT_IMPLEMENTED_MESSAGE)
 
     def build(
-        self: "MirrorBuilder", surface: Surface, direction: Direction
+        self: "MirrorBuilder", surface: Surface, direction: Direction, material: Material = None
     ) -> EncapsulatedPrimitive:
         """Build a mirror using a surface parameters.
 
@@ -99,6 +104,8 @@ class MirrorBuilder(OpticsBuilder):
         surface : Surface
         direction : {-1, 1}
             Ray propagation direction.
+        material : Material
+            Default is None. User-defined Raysect optical material of the mirror.
 
         Returns
         -------
@@ -109,12 +116,12 @@ class MirrorBuilder(OpticsBuilder):
 
 class LensBuilder(OpticsBuilder):
     def _extract_parameters(
-        self: "LensBuilder", back_surface: Surface, front_surface: Surface
+        self: "LensBuilder", back_surface: Surface, front_surface: Surface, material: Material = None
     ) -> None:
         raise NotImplementedError(NOT_IMPLEMENTED_MESSAGE)
 
     def build(
-        self: "LensBuilder", back_surface: Surface, front_surface: Surface
+        self: "LensBuilder", back_surface: Surface, front_surface: Surface, material: Material = None
     ) -> EncapsulatedPrimitive:
         raise NotImplementedError(NOT_IMPLEMENTED_MESSAGE)
 

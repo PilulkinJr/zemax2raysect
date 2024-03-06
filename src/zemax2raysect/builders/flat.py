@@ -47,12 +47,15 @@ class CylinderBuilder(MirrorBuilder):
     def _extract_parameters(
         self: "CylinderBuilder",
         surface: Union[Standard, Toroidal],
+        material: Material = None,
     ) -> None:
         """Extract parameters from a surface description.
 
         Parameters
         ----------
         surface : Standard or Toroidal
+        material : Material
+            Custom mirror material. Default is None (ideal mirror).
 
         Returns
         -------
@@ -60,7 +63,7 @@ class CylinderBuilder(MirrorBuilder):
         """
         if surface.semi_diameter < 1e-8:
             raise CannotCreatePrimitive(
-                f"Cannot create Cylinder from {surface}: radius is too small: {surface.radius}"
+                f"Cannot create Cylinder from {surface}: semi_diameter is too small: {surface.semi_diameter}"
             )
 
         surface_type, shape_type = determine_primitive_type(surface)
@@ -71,28 +74,36 @@ class CylinderBuilder(MirrorBuilder):
         if shape_type is not ShapeType.ROUND:
             raise CannotCreatePrimitive(f"Cannot create Cylinder from {surface}: it is not round")
 
+        if material and not isinstance(material, Material):
+            raise TypeError(f"Cannot create Cylinder from {surface}: material must be a Raysect Material.")
+
         self._radius = surface.semi_diameter
         self._thickness = surface.thickness or DEFAULT_THICKNESS
-        self._material = find_material(surface.material)
+        self._material = material or find_material(surface.material)
         self._name = surface.name
 
     def build(
         self: "CylinderBuilder",
         surface: Union[Standard, Toroidal],
         direction: Direction = 1,
+        material: Material = None,
     ) -> Cylinder:
         """Create a raysect.primitive.Cylinder using parameters from a surface description.
 
         Parameters
         ----------
         surface : Standard or Toroidal
+        direction : {-1, 1}, default = 1
+            Ray propagation direction.
+        material : Material
+            Custom mirror material. Default is None (ideal mirror).
 
         Returns
         -------
         Cylinder
         """
         self._clear_parameters()
-        self._extract_parameters(surface)
+        self._extract_parameters(surface, material)
 
         return Cylinder(self._radius, self._thickness, material=self._material, name=self._name)
 
@@ -123,12 +134,15 @@ class BoxBuilder(MirrorBuilder):
     def _extract_parameters(
         self: "BoxBuilder",
         surface: Union[Standard, Toroidal],
+        material: Material = None,
     ) -> None:
         """Extract parameters from a surface description.
 
         Parameters
         ----------
         surface : Standard or Toroidal
+        material : Material
+            Custom mirror material. Default is None (ideal mirror).
 
         Returns
         -------
@@ -136,7 +150,7 @@ class BoxBuilder(MirrorBuilder):
         """
         if surface.semi_diameter < 1e-8:
             raise CannotCreatePrimitive(
-                f"Cannot create Cylinder from {surface}: radius is too small: {surface.radius}"
+                f"Cannot create box-shaped object from {surface}: semi_diameter is too small: {surface.semi_diameter}"
             )
 
         if surface.aperture is None:
@@ -158,29 +172,35 @@ class BoxBuilder(MirrorBuilder):
         if shape_type is not ShapeType.RECTANGULAR:
             raise CannotCreatePrimitive(f"Cannot create Box from {surface}: it is not rectangular")
 
+        if material and not isinstance(material, Material):
+            raise TypeError(f"Cannot create box-shaped object from {surface}: material must be a Raysect Material.")
+
         self._semi_width = surface.aperture[0]
         self._semi_height = surface.aperture[1]
         self._thickness = surface.thickness or DEFAULT_THICKNESS
-        self._material = find_material(surface.material)
+        self._material = material or find_material(surface.material)
         self._name = surface.name
 
     def build(
         self: "BoxBuilder",
         surface: Union[Standard, Toroidal],
         direction: Direction,
+        material: Material = None,
     ) -> Box:
         """Create a raysect.primitive.Box using parameters from a surface description.
 
         Parameters
         ----------
         surface : Standard or Toroidal
+        material : Material
+            Custom mirror material. Default is None (ideal mirror).
 
         Returns
         -------
         Box
         """
         self._clear_parameters()
-        self._extract_parameters(surface)
+        self._extract_parameters(surface, material)
 
         lower = Point3D(-self._semi_width, -self._semi_height, 0)
         upper = Point3D(self._semi_width, self._semi_height, self._thickness)
@@ -223,6 +243,7 @@ class AbstractFlatPrimitiveBuilder:
         name: str,
         surface: Union[Standard, Toroidal],
         direction: Direction = 1,
+        material: Material = None,
     ) -> Union[Cylinder, Box]:
         """Build a primitive with a requested name.
 
@@ -231,17 +252,19 @@ class AbstractFlatPrimitiveBuilder:
         name : str
         surface : Standard or Toroidal
         direction : {-1, 1}, default = 1
+        material : Material
+            Custom mirror material. Default is None (ideal mirror).
 
         Returns
         -------
         Circle or Rectangle
         """
-        return cls.get_builder(name)().build(surface, direction)
+        return cls.get_builder(name)().build(surface, direction, material)
 
 
-def create_cylinder(surface: Union[Standard, Toroidal], direction: Direction = 1) -> Cylinder:
-    return CylinderBuilder().build(surface, direction)
+def create_cylinder(surface: Union[Standard, Toroidal], direction: Direction = 1, material: Material = None) -> Cylinder:
+    return CylinderBuilder().build(surface, direction, material)
 
 
-def create_box(surface: Union[Standard, Toroidal], direction: Direction = 1) -> Box:
-    return BoxBuilder().build(surface, direction)
+def create_box(surface: Union[Standard, Toroidal], direction: Direction = 1, material: Material = None) -> Box:
+    return BoxBuilder().build(surface, direction, material)

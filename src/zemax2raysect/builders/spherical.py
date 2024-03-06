@@ -31,7 +31,7 @@ class SphericalMirrorBuilder(MirrorBuilder):
 
     Methods
     -------
-    build(surface, direction) : SphericalMirror
+    build(surface, direction, material=None) : SphericalMirror
         Build a SphericalMirror instance using Zemax surface description.
     """
 
@@ -54,12 +54,15 @@ class SphericalMirrorBuilder(MirrorBuilder):
     def _extract_parameters(
         self: "SphericalMirrorBuilder",
         surface: Union[Standard, Toroidal],
+        material: Material = None,
     ) -> None:
         """Extract required parameters from a surface description.
 
         Parameters
         ----------
         surface : Union[Standard, Toroidal]
+        material : Material
+            Custom mirror material. Default is None (ideal mirror).
 
         Returns
         -------
@@ -87,6 +90,9 @@ class SphericalMirrorBuilder(MirrorBuilder):
                 + f"aperture type of 'surface' {surface} is not implemented"
             )
 
+        if material and not isinstance(material, Material):
+            raise TypeError(f"Cannot create a mirror from {surface}: material must be a Raysect Material.")
+
         if shape_type == ShapeType.RECTANGULAR:
             LOGGER.warning(
                 "Despite of having a rectangular aperture, "
@@ -96,7 +102,7 @@ class SphericalMirrorBuilder(MirrorBuilder):
         self._diameter = 2 * surface.semi_diameter
         self._center_thickness = surface.thickness or DEFAULT_THICKNESS
         self._curvature = abs(surface.radius)
-        self._material = find_material(surface.material)
+        self._material = material or find_material(surface.material)
         self._name = surface.name
         self._curvature_sign = sign(surface.radius)
 
@@ -104,6 +110,7 @@ class SphericalMirrorBuilder(MirrorBuilder):
         self: "SphericalMirrorBuilder",
         surface: Union[Standard, Toroidal],
         direction: Direction = 1,
+        material: Material = None,
     ) -> SphericalMirror:
         """Build a SphericalMirror using Zemax surface.
 
@@ -113,13 +120,15 @@ class SphericalMirrorBuilder(MirrorBuilder):
             Toroidal type surface can define a spherical surface if curvatures are equal.
         direction : -1 or 1, default = 1
             Handles a Zemax ray propagation direction.
+        material : Material
+            Custom mirror material. Default is None (ideal mirror).
 
         Returns
         -------
         SphericalMirror
         """
         self._clear_parameters()
-        self._extract_parameters(surface)
+        self._extract_parameters(surface, material)
 
         # mirror = SphericalMirror(
         #     self._diameter,
@@ -154,7 +163,7 @@ class SphericalLensBuilder(LensBuilder):
 
     Methods
     -------
-    build(back_surface, front_surface) : raysect.primitive.EncapsulatedPrimitive
+    build(back_surface, front_surface, material=None) : raysect.primitive.EncapsulatedPrimitive
         Build a new lens using parameters stored in two surfaces.
         Type of lens (biconvex, biconcave, etc.) automatically resolved using those parameters.
     """
@@ -188,18 +197,26 @@ class SphericalLensBuilder(LensBuilder):
         self: "SphericalLensBuilder",
         back_surface: Union[Standard, Toroidal],
         front_surface: Union[Standard, Toroidal],
+        material: Material = None,
     ) -> None:
         """Extract lens parameters from two surfaces.
 
         Parameters
         ----------
         back_surface, front_surface : Union[Standard, Toroidal]
+        material : Material
+            Custom lens material. Default is None (will search back_surface.material in the Raysect library).
 
         Returns
         -------
         None
         """
-        self._check_for_material(back_surface)
+        if material and not isinstance(material, Material):
+            raise TypeError(f"Cannot create a lens from {back_surface.name, front_surface.name}:"
+                            " material must be a Raysect Material.")
+
+        if not material:
+            self._check_for_material(back_surface)
         self._check_for_small_numbers(back_surface)
         self._check_for_small_numbers(front_surface)
 
@@ -228,7 +245,7 @@ class SphericalLensBuilder(LensBuilder):
         self._center_thickness = back_surface.thickness
         self._back_curvature = abs(back_surface.radius)
         self._front_curvature = abs(front_surface.radius)
-        self._material = find_material(back_surface.material)
+        self._material = material or find_material(back_surface.material)
         self._name = back_surface.name or front_surface.name
 
     def _build_bicurve_lens(
@@ -249,8 +266,6 @@ class SphericalLensBuilder(LensBuilder):
         -------
         raysect.primitive.EncapsulatedPrimitive
         """
-        self._clear_parameters()
-        self._extract_parameters(back_surface, front_surface)
 
         return lens_class(
             diameter=self._diameter,
@@ -267,9 +282,6 @@ class SphericalLensBuilder(LensBuilder):
         back_surface: Union[Standard, Toroidal],
         front_surface: Union[Standard, Toroidal],
     ) -> EncapsulatedPrimitive:
-
-        self._clear_parameters()
-        self._extract_parameters(back_surface, front_surface)
 
         lens = lens_class(
             diameter=self._diameter,
@@ -288,8 +300,6 @@ class SphericalLensBuilder(LensBuilder):
         back_surface: Union[Standard, Toroidal],
         front_surface: Union[Standard, Toroidal],
     ) -> Cylinder:
-        self._clear_parameters()
-        self._extract_parameters(back_surface, front_surface)
 
         return Cylinder(
             self._diameter * 0.5,
@@ -333,9 +343,6 @@ class SphericalLensBuilder(LensBuilder):
         front_surface: Union[Standard, Toroidal],
     ) -> EncapsulatedPrimitive:
 
-        self._clear_parameters()
-        self._extract_parameters(back_surface, front_surface)
-
         return lens_class(
             diameter=self._diameter,
             center_thickness=self._center_thickness,
@@ -350,9 +357,6 @@ class SphericalLensBuilder(LensBuilder):
         back_surface: Union[Standard, Toroidal],
         front_surface: Union[Standard, Toroidal],
     ) -> EncapsulatedPrimitive:
-
-        self._clear_parameters()
-        self._extract_parameters(back_surface, front_surface)
 
         lens = lens_class(
             diameter=self._diameter,
@@ -398,6 +402,7 @@ class SphericalLensBuilder(LensBuilder):
         self: "SphericalLensBuilder",
         back_surface: Union[Standard, Toroidal],
         front_surface: Union[Standard, Toroidal],
+        material: Material = None,
     ) -> Union[Meniscus, BiConvex, BiConcave, PlanoConvex, PlanoConcave]:
         """Build a spherical lens using Zemax surface.
 
@@ -405,13 +410,15 @@ class SphericalLensBuilder(LensBuilder):
         ----------
         back_surface, front_surface : Standard or Toroidal
             Surfaces defining a spherical lens.
+        material : Material
+            Custom lens material. Default is None (will search back_surface.material in the Raysect library).
 
         Returns
         -------
         {Meniscus, BiConvex, BiConcave, PlanoConvex, PlanoConcave}
         """
         self._clear_parameters()
-        self._extract_parameters(back_surface, front_surface)
+        self._extract_parameters(back_surface, front_surface, material)
 
         back_sgn = sign(back_surface.radius)
         front_sgn = sign(front_surface.radius)
@@ -453,22 +460,26 @@ class SphericalLensBuilder(LensBuilder):
 def create_spherical_mirror(
     surface: Union[Standard, Toroidal],
     direction: Direction = 1,
+    material: Material = None,
 ) -> SphericalMirror:
-    return SphericalMirrorBuilder().build(surface, direction)
+    return SphericalMirrorBuilder().build(surface, direction, material)
 
 
 def create_spherical_lens(
     back_surface: Union[Standard, Toroidal],
     front_surface: Union[Standard, Toroidal],
+    material: Material = None,
 ) -> Union[Meniscus, BiConvex, BiConcave, PlanoConvex, PlanoConcave]:
     """Build a spherical lens primitive using two surfaces.
 
     Parameters
     ----------
     back_surface, front_surface : Standard or Toroidal
+    material : Material
+        Custom lens material. Default is None (will search back_surface.material in the Raysect library).
 
     Returns
     -------
     {Meniscus, BiConvex, BiConcave, PlanoConvex, PlanoConcave}
     """
-    return SphericalLensBuilder().build(back_surface, front_surface)
+    return SphericalLensBuilder().build(back_surface, front_surface, material)

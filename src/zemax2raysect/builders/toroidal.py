@@ -35,7 +35,7 @@ class ToricMirrorBuilder(MirrorBuilder):
 
     Methods
     -------
-    build(surface, direction) : ToricMirror
+    build(surface, direction, material=None) : ToricMirror
         Build a ToricMirror instance using Zemax surface description.
     """
 
@@ -63,12 +63,14 @@ class ToricMirrorBuilder(MirrorBuilder):
         self._name: str = None
         self._curvature_sign: int = None
 
-    def _extract_parameters(self: "ToricMirrorBuilder", surface: Toroidal) -> None:
+    def _extract_parameters(self: "ToricMirrorBuilder", surface: Toroidal, material: Material = None) -> None:
         """Extract required parameters from a surface description.
 
         Parameters
         ----------
         surface : Toroidal
+        material : Material
+            Custom mirror material. Default is None (ideal mirror).
 
         Returns
         -------
@@ -97,6 +99,9 @@ class ToricMirrorBuilder(MirrorBuilder):
         if shape_type not in (ShapeType.RECTANGULAR, ShapeType.ROUND):
             raise CannotCreatePrimitive(f"Surface {surface} not a circle, nor a rectangle")
 
+        if material and not isinstance(material, Material):
+            raise TypeError(f"Cannot create a mirror from {surface}: material must be a Raysect Material.")
+
         if shape_type == ShapeType.RECTANGULAR:
             LOGGER.warning(
                 "Despite of having a rectangular aperture, "
@@ -107,7 +112,7 @@ class ToricMirrorBuilder(MirrorBuilder):
         self._center_thickness = surface.thickness or DEFAULT_THICKNESS
         self._vertical_curvature = abs(surface.radius)
         self._horizontal_curvature = abs(surface.radius_horizontal)
-        self._material = find_material(surface.material)
+        self._material = material or find_material(surface.material)
         self._name = surface.name
         self._curvature_sign = sign(surface.radius)
 
@@ -115,6 +120,7 @@ class ToricMirrorBuilder(MirrorBuilder):
         self: "ToricMirrorBuilder",
         surface: Toroidal,
         direction: Direction = 1,
+        material: Material = None,
     ) -> ToricMirror:
         """Build a ToricMirror using Zemax surface.
 
@@ -123,13 +129,15 @@ class ToricMirrorBuilder(MirrorBuilder):
         surface : Toroidal
         direction : -1 or 1, default = 1
             Handles a Zemax ray propagation direction.
+        material : Material
+            Custom mirror material. Default is None (ideal mirror).        
 
         Returns
         -------
         ToricMirror
         """
         self._clear_parameters()
-        self._extract_parameters(surface)
+        self._extract_parameters(surface, material)
 
         # mirror = ToricMirror(
         #     self._diameter,
@@ -177,9 +185,15 @@ class ToricLensBuilder(LensBuilder):
         self: "ToricLensBuilder",
         back_surface: Toroidal,
         front_surface: Toroidal,
+        material: Material = None,
     ) -> None:
 
-        self._check_for_material(back_surface)
+        if material and not isinstance(material, Material):
+            raise TypeError(f"Cannot create a lens from {back_surface.name, front_surface.name}:"
+                            " material must be a Raysect Material.")
+
+        if not material:
+            self._check_for_material(back_surface)
         self._check_for_small_numbers(back_surface)
         self._check_for_small_numbers(front_surface)
 
@@ -225,13 +239,14 @@ class ToricLensBuilder(LensBuilder):
         self._back_curvature_horizontal = abs(back_surface.radius_horizontal)
         self._front_curvature_vertical = abs(front_surface.radius)
         self._front_curvature_horizontal = abs(front_surface.radius_horizontal)
-        self._material = find_material(back_surface.material)
+        self._material = material or find_material(back_surface.material)
         self._name = back_surface.name or front_surface.name
 
     def build(
         self: "ToricLensBuilder",
         back_surface: Toroidal,
         front_surface: Toroidal,
+        material: Material = None,
     ) -> Union[ToricBiConvex, ToricBiConcave, ToricMeniscus, ToricPlanoConvex, ToricPlanoConcave]:
         """Build a toric lens using two Zemax surfaces.
 
@@ -239,13 +254,15 @@ class ToricLensBuilder(LensBuilder):
         ----------
         back_surface, front_surface : Toroidal
             Surfaces defining a lens.
+        material : Material
+            Custom lens material. Default is None (will search back_surface.material in the Raysect library).
 
         Returns
         -------
         EncapsulatedPrimitive
         """
         self._clear_parameters()
-        self._extract_parameters(back_surface, front_surface)
+        self._extract_parameters(back_surface, front_surface, material)
 
         back_sgn = sign(back_surface.radius)
         front_sgn = sign(front_surface.radius)
@@ -300,8 +317,6 @@ class ToricLensBuilder(LensBuilder):
         -------
         instance of 'lens_class'
         """
-        self._clear_parameters()
-        self._extract_parameters(back_surface, front_surface)
 
         return lens_class(
             diameter=self._diameter,
@@ -331,8 +346,6 @@ class ToricLensBuilder(LensBuilder):
         -------
         instance of 'lens_class'
         """
-        self._clear_parameters()
-        self._extract_parameters(back_surface, front_surface)
 
         lens = lens_class(
             diameter=self._diameter,
@@ -365,8 +378,6 @@ class ToricLensBuilder(LensBuilder):
         -------
         instance of 'lens_class'
         """
-        self._clear_parameters()
-        self._extract_parameters(back_surface, front_surface)
 
         return lens_class(
             diameter=self._diameter,
@@ -394,8 +405,6 @@ class ToricLensBuilder(LensBuilder):
         -------
         instance of 'lens_class'
         """
-        self._clear_parameters()
-        self._extract_parameters(back_surface, front_surface)
 
         lens = lens_class(
             diameter=self._diameter,
