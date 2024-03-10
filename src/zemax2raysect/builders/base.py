@@ -121,7 +121,7 @@ class LensBuilder(OpticsBuilder):
         raise NotImplementedError(NOT_IMPLEMENTED_MESSAGE)
 
     def build(
-        self: "LensBuilder", back_surface: Surface, front_surface: Surface, material: Material = None
+        self: "LensBuilder", back_surface: Surface, front_surface: Surface, directiion: Direction, material: Material = None
     ) -> EncapsulatedPrimitive:
         raise NotImplementedError(NOT_IMPLEMENTED_MESSAGE)
 

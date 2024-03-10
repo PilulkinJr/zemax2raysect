@@ -109,7 +109,7 @@ class ToricMirrorBuilder(MirrorBuilder):
             )
 
         self._diameter = 2 * surface.semi_diameter
-        self._center_thickness = surface.thickness or DEFAULT_THICKNESS
+        self._center_thickness = abs(surface.thickness) or DEFAULT_THICKNESS
         self._vertical_curvature = abs(surface.radius)
         self._horizontal_curvature = abs(surface.radius_horizontal)
         self._material = material or find_material(surface.material)
@@ -178,8 +178,6 @@ class ToricLensBuilder(LensBuilder):
         self._front_curvature_horizontal: float = None
         self._material: Material = None
         self._name: str = None
-        self._back_curvature_sign: int = None
-        self._front_curvature_sign: int = None
 
     def _extract_parameters(
         self: "ToricLensBuilder",
@@ -246,6 +244,7 @@ class ToricLensBuilder(LensBuilder):
         self: "ToricLensBuilder",
         back_surface: Toroidal,
         front_surface: Toroidal,
+        direction: Direction = 1,
         material: Material = None,
     ) -> Union[ToricBiConvex, ToricBiConcave, ToricMeniscus, ToricPlanoConvex, ToricPlanoConcave]:
         """Build a toric lens using two Zemax surfaces.
@@ -256,7 +255,8 @@ class ToricLensBuilder(LensBuilder):
             Surfaces defining a lens.
         material : Material
             Custom lens material. Default is None (will search back_surface.material in the Raysect library).
-
+        direction : -1 or 1, default = 1
+            Handles a Zemax ray propagation direction.
         Returns
         -------
         EncapsulatedPrimitive
@@ -264,8 +264,8 @@ class ToricLensBuilder(LensBuilder):
         self._clear_parameters()
         self._extract_parameters(back_surface, front_surface, material)
 
-        back_sgn = sign(back_surface.radius)
-        front_sgn = sign(front_surface.radius)
+        back_sgn = sign(back_surface.radius) * sign(direction)
+        front_sgn = sign(front_surface.radius) * sign(direction)
 
         if back_sgn == 0 and front_sgn == 0:
             return create_cylinder(back_surface)
