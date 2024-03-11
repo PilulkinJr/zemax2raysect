@@ -265,6 +265,7 @@ class OpticalNodeBuilder:
             except CannotCreatePrimitive:
                 continue
 
+            # rotate lens towards -Z if ray propogation direction is negative
             if direction < 0:
                 lens.transform *= rotate_y(180)
 
