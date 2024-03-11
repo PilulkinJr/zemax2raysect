@@ -40,6 +40,7 @@ class CylindricalMirrorBuilder(MirrorBuilder):
         self._curvature: float = None
         self._material: Material = None
         self._name: str = None
+        self._curvature_sign: int = None
         self._rotation: AffineMatrix3D = AffineMatrix3D()
 
     def _extract_parameters(self: "CylindricalMirrorBuilder", surface: Toroidal, material: Material = None) -> None:
@@ -140,8 +141,8 @@ class CylindricalLensBuilder(LensBuilder):
         self._material: Material = None
         self._name: str = None
         self._rotation: AffineMatrix3D = AffineMatrix3D()
-        self._back_sgn: int = None
-        self._front_sgn: int = None
+        self._back_curvature_sign: int = None
+        self._front_curvature_sign: int = None
 
     def _extract_parameters(
         self: "CylindricalLensBuilder",
@@ -155,6 +156,8 @@ class CylindricalLensBuilder(LensBuilder):
         ----------
         back_surface, front_surface : Toroidal
             Two sequential surfaces defining a cylindrical lens.
+        direction : {-1, 1}, default = 1
+            Ray propagation direction.
         material: Material
             Custom lens material. Default is None
             (will search back_surface.material in the Raysect library).
@@ -201,9 +204,9 @@ class CylindricalLensBuilder(LensBuilder):
                 raise NotImplementedError("Cylindrical lens faces have different orientations")
 
             self._back_curvature = abs(back_surface.radius)
-            self._back_sgn = sign(back_surface.radius)
+            self._back_curvature_sign = sign(back_surface.radius)
             self._front_curvature = abs(front_surface.radius)
-            self._front_sgn = sign(front_surface.radius)
+            self._front_curvature_sign = sign(front_surface.radius)
             self._rotation = AffineMatrix3D()
 
         elif back_surface.radius == 0:
@@ -212,9 +215,9 @@ class CylindricalLensBuilder(LensBuilder):
                 raise NotImplementedError("Cylindrical lens faces have different orientations")
 
             self._back_curvature = abs(back_surface.radius_horizontal)
-            self._back_sgn = sign(back_surface.radius_horizontal)
+            self._back_curvature_sign = sign(back_surface.radius_horizontal)
             self._front_curvature = abs(front_surface.radius_horizontal)
-            self._front_sgn = sign(front_surface.radius_horizontal)
+            self._front_curvature_sign = sign(front_surface.radius_horizontal)
             self._rotation = rotate_z(90)
 
         elif back_surface.radius != back_surface.radius_horizontal:
@@ -250,7 +253,7 @@ class CylindricalLensBuilder(LensBuilder):
         #     self._rotation = rotate_z(90)
 
         self._diameter = back_surface.semi_diameter * 2 or front_surface.semi_diameter * 2
-        self._center_thickness = back_surface.thickness or DEFAULT_THICKNESS
+        self._center_thickness = abs(back_surface.thickness) or DEFAULT_THICKNESS
         self._material = material or find_material(back_surface.material)
         self._name = back_surface.name or front_surface.name
 
@@ -258,6 +261,7 @@ class CylindricalLensBuilder(LensBuilder):
         self: "CylindricalLensBuilder",
         back_surface: Toroidal,
         front_surface: Toroidal,
+        direction: Direction = 1,
         material: Material = None,
     ) -> Union[
         CylindricalBiConvex,
@@ -271,6 +275,8 @@ class CylindricalLensBuilder(LensBuilder):
         Parameters
         ----------
         back_surface, front_surface : Toroidal
+        direction : {-1, 1}, default = 1
+            Ray propagation direction.
         material : Material
             Custom lens material. Default is None
             (will search back_surface.material in the Raysect library).
@@ -280,45 +286,48 @@ class CylindricalLensBuilder(LensBuilder):
         Union[BiConvex, BiConcave, Meniscus, PlanoConvex, PlanoConcave]
         """
         self._clear_parameters()
-        self._extract_parameters(back_surface, front_surface, material)
+        self._extract_parameters(back_surface, front_surface, direction, material)
+
+        back_sgn = sign(self._back_curvature_sign) * sign(direction)
+        front_sgn = sign(self._back_curvature_sign) * sign(direction)
 
         LOGGER.debug(
             "Building cylindrical lens: back_sgn = %g, back_sgn = %g",
-            self._back_sgn,
-            self._front_sgn,
+            back_sgn,
+            front_sgn,
         )
 
-        if self._back_sgn == 0 and self._front_sgn == 0:
+        if back_sgn == 0 and front_sgn == 0:
             return create_cylinder(back_surface)
 
-        if self._back_sgn < 0 and self._front_sgn < 0:
+        if back_sgn < 0 and front_sgn < 0:
             LOGGER.debug("%s is a positive meniscus", back_surface.name)
             return self._build_positive_meniscus(back_surface, front_surface)
 
-        if self._back_sgn > 0 and self._front_sgn > 0:
+        if back_sgn > 0 and front_sgn > 0:
             LOGGER.debug("%s is a negative meniscus", back_surface.name)
             return self._build_negative_meniscus(back_surface, front_surface)
 
-        if self._back_sgn > 0 and self._front_sgn < 0:
+        if back_sgn > 0 and front_sgn < 0:
             LOGGER.debug("%s is a biconvex lens", back_surface.name)
             return self._build_biconvex(back_surface, front_surface)
 
-        if self._back_sgn < 0 and self._front_sgn > 0:
+        if back_sgn < 0 and front_sgn > 0:
             LOGGER.debug("%s is a biconcave lens", back_surface.name)
             return self._build_biconcave(back_surface, front_surface)
 
-        if self._back_sgn == 0:
+        if back_sgn == 0:
 
-            if self._front_sgn < 0:
+            if front_sgn < 0:
                 LOGGER.debug("%s is a plano-convex lens", back_surface.name)
                 return self._build_planoconvex(back_surface, front_surface)
 
             LOGGER.debug("%s is a plano-concave lens", back_surface.name)
             return self._build_planoconcave(back_surface, front_surface)
 
-        if self._front_sgn == 0:
+        if front_sgn == 0:
 
-            if self._back_sgn > 0:
+            if back_sgn > 0:
                 LOGGER.debug("%s is a convex-plano lens", back_surface.name)
                 return self._build_convexplano(back_surface, front_surface)
 
