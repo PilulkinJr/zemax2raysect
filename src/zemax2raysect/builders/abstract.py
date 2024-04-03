@@ -87,15 +87,16 @@ class AbstractLensBuilder:
         name: str,
         back_surface: Surface,
         front_surface: Surface,
+        direction: Direction,
         material: Material = None,
     ) -> EncapsulatedPrimitive:
 
-        return cls.get_builder(name)().build(back_surface, front_surface, material)
+        return cls.get_builder(name)().build(back_surface, front_surface, direction, material)
 
 
 def create_mirror(name: str, surface: Surface, direction: Direction, material: Material = None) -> EncapsulatedPrimitive:
     return AbstractMirrorBuilder.build(name, surface, direction, material)
 
 
-def create_lens(name: str, back_surface: Surface, front_surface: Surface, material: Material = None) -> EncapsulatedPrimitive:
-    return AbstractLensBuilder.build(name, back_surface, front_surface, material)
+def create_lens(name: str, back_surface: Surface, front_surface: Surface, direction: Direction, material: Material = None) -> EncapsulatedPrimitive:
+    return AbstractLensBuilder.build(name, back_surface, front_surface, direction, material)
